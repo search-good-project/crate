@@ -25,21 +25,26 @@ package io.crate.execution.engine.window;
 import io.crate.analyze.WindowDefinition;
 import io.crate.data.Row;
 import io.crate.data.Row1;
+import io.crate.data.RowN;
 import io.crate.testing.BatchIteratorTester;
 import io.crate.testing.BatchSimulatingIterator;
 import io.crate.testing.TestingBatchIterators;
+import io.crate.testing.TestingRowConsumer;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.is;
+
 public class WindowBatchIteratorTest {
 
-    private List<Object[]> expectedResult = IntStream.range(0, 10)
-        .mapToObj(l -> new Object[]{45}).collect(Collectors.toList());
+    private List<Object[]> expectedRowNumberResult = IntStream.range(0, 10)
+        .mapToObj(l -> new Object[]{l + 1}).collect(Collectors.toList());
 
     @Test
     public void testSumWindowBatchIterator() throws Exception {
@@ -48,13 +53,12 @@ public class WindowBatchIteratorTest {
                 emptyWindow(),
                 Collections.emptyList(),
                 Collections.emptyList(),
-                1,
                 TestingBatchIterators.range(0, 10),
-                getIntSummingCollector()
+                Collections.singletonList(getRowNumberWindowFunction())
             )
         );
 
-        tester.verifyResultAndEdgeCaseBehaviour(expectedResult);
+        tester.verifyResultAndEdgeCaseBehaviour(expectedRowNumberResult);
     }
 
     @Test
@@ -64,20 +68,56 @@ public class WindowBatchIteratorTest {
                 emptyWindow(),
                 Collections.emptyList(),
                 Collections.emptyList(),
-                1,
                 new BatchSimulatingIterator<>(
                     TestingBatchIterators.range(0, 10), 4, 2, null),
-                getIntSummingCollector()
+                Collections.singletonList(getRowNumberWindowFunction())
             )
         );
 
-        tester.verifyResultAndEdgeCaseBehaviour(expectedResult);
+        tester.verifyResultAndEdgeCaseBehaviour(expectedRowNumberResult);
     }
 
-    private Collector<Row, ?, Iterable<Row>> getIntSummingCollector() {
-        return Collectors.collectingAndThen(
-            Collectors.summingInt(r -> (int) r.get(0)),
-            sum -> Collections.singletonList(new Row1(sum)));
+    private WindowFunction getRowNumberWindowFunction() {
+        return new WindowFunction() {
+            @Override
+            public Iterable<Row> execute(WindowFrame frame) {
+                ArrayList<Row> rows = new ArrayList<>();
+                while (frame.moveNext()) {
+                    rows.add(new Row1(frame.windowRowPosition()));
+                }
+                return rows;
+            }
+
+            @Override
+            public int numColumns() {
+                return 1;
+            }
+        };
+    }
+
+    @Test
+    public void testFrameBounds() throws Exception {
+        WindowFunction frameBoundsWindowFunction = new WindowFunction() {
+            @Override
+            public Iterable<Row> execute(WindowFrame frame) {
+                return Collections.singletonList(new RowN(new Object[]{frame.frameStartPosition(), frame.frameEndPosition()}));
+            }
+
+            @Override
+            public int numColumns() {
+                return 2;
+            }
+        };
+
+        TestingRowConsumer consumer = new TestingRowConsumer();
+        consumer.accept(new WindowBatchIterator(
+            emptyWindow(),
+            Collections.emptyList(),
+            Collections.emptyList(),
+            TestingBatchIterators.range(0, 10),
+            Collections.singletonList(frameBoundsWindowFunction)), null);
+
+        assertThat(consumer.getResult().get(0), is(Collections.singletonList(new Object[]{0, 10})));
     }
 
     private static WindowDefinition emptyWindow() {

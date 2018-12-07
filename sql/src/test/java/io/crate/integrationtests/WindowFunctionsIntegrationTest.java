@@ -42,6 +42,27 @@ public class WindowFunctionsIntegrationTest extends SQLTransportIntegrationTest 
     }
 
     @Test
+    public void testOrderedWindow() {
+        execute("select col1, avg(col1) OVER(ORDER BY col1 NULLS LAST) from unnest([2, 1, 1, 3, 3, null, 4]) order by 1 desc");
+        assertThat(printedTable(response.rows()), is("NULL| 2.3333333333333335\n" +
+                                                     "4| 2.3333333333333335\n" +
+                                                     "3| 2.0\n" +
+                                                     "3| 2.0\n" +
+                                                     "2| 1.3333333333333333\n" +
+                                                     "1| 1.0\n" +
+                                                     "1| 1.0\n"));
+    }
+
+    @Test
+    public void testOrderedWindowWithSingleRowWindows() {
+        execute("select col1, sum(col1) OVER(ORDER BY col1) from unnest([1, 2, 3, 4])");
+        assertThat(printedTable(response.rows()), is("1| 1\n" +
+                                                     "2| 3\n" +
+                                                     "3| 6\n" +
+                                                     "4| 10\n"));
+    }
+
+    @Test
     public void testSelectStandaloneColumnsAndWindowFunction() {
         execute("select col1, avg(col1) OVER(), col2 from unnest([1, 2, null], [3, 4, 5])");
         assertThat(printedTable(response.rows()), is("1| 1.5| 3\n" +

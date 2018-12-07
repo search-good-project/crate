@@ -72,7 +72,8 @@ import io.crate.execution.engine.indexing.UpsertResultContext;
 import io.crate.execution.engine.sort.OrderingByPosition;
 import io.crate.execution.engine.sort.SortingProjector;
 import io.crate.execution.engine.sort.SortingTopNProjector;
-import io.crate.execution.engine.window.WindowFunctionContext;
+import io.crate.execution.engine.window.AggregateToWindowFunctionAdapter;
+import io.crate.execution.engine.window.WindowFunction;
 import io.crate.execution.engine.window.WindowProjector;
 import io.crate.execution.jobs.NodeJobsCounter;
 import io.crate.expression.InputFactory;
@@ -82,7 +83,6 @@ import io.crate.expression.reference.StaticTableDefinition;
 import io.crate.expression.reference.sys.SysRowUpdater;
 import io.crate.expression.symbol.Literal;
 import io.crate.expression.symbol.Symbol;
-import io.crate.expression.symbol.WindowFunction;
 import io.crate.metadata.ColumnIdent;
 import io.crate.metadata.FunctionImplementation;
 import io.crate.metadata.Functions;
@@ -581,16 +581,16 @@ public class ProjectionToProjectorVisitor
 
     @Override
     public Projector visitWindowAgg(WindowAggProjection windowAgg, Context context) {
-        Map<WindowFunction, List<Symbol>> functionsWithInputs = windowAgg.functionsWithInputs();
+        Map<io.crate.expression.symbol.WindowFunction, List<Symbol>> functionsWithInputs = windowAgg.functionsWithInputs();
 
-        ArrayList<WindowFunctionContext> functionContexts = new ArrayList<>(functionsWithInputs.size());
-        InputFactory.Context<CollectExpression<Row, ?>> ctx = inputFactory.ctxForInputColumns(context.txnCtx);
-        for (Map.Entry<WindowFunction, List<Symbol>> functionAndInputsEntry : functionsWithInputs.entrySet()) {
+        ArrayList<WindowFunction> windowFunctions = new ArrayList<>(functionsWithInputs.size());
+        for (Map.Entry<io.crate.expression.symbol.WindowFunction, List<Symbol>> functionAndInputsEntry : functionsWithInputs.entrySet()) {
+            InputFactory.Context<CollectExpression<Row, ?>> ctx = inputFactory.ctxForInputColumns(context.txnCtx);
             ctx.add(functionAndInputsEntry.getValue());
 
             FunctionImplementation impl = this.functions.getQualified((functionAndInputsEntry.getKey()).info().ident());
             assert impl instanceof AggregationFunction : "We currently only support aggregation functions as window functions";
-            functionContexts.add(new WindowFunctionContext(ctx.topLevelInputs(), (AggregationFunction) impl, ctx.expressions()));
+            windowFunctions.add(new AggregateToWindowFunctionAdapter(ctx.topLevelInputs().toArray(new Input[0]), (AggregationFunction) impl, ctx.expressions(), indexVersionCreated, bigArrays, context.ramAccountingContext));
         }
 
         InputFactory.Context<CollectExpression<Row, ?>> contextForStandaloneInputs = inputFactory.ctxForInputColumns(context.txnCtx);
@@ -598,12 +598,9 @@ public class ProjectionToProjectorVisitor
 
         return new WindowProjector(
             windowAgg.windowDefinition(),
-            functionContexts,
+            windowFunctions,
             contextForStandaloneInputs.topLevelInputs(),
-            contextForStandaloneInputs.expressions(),
-            context.ramAccountingContext,
-            indexVersionCreated,
-            bigArrays);
+            contextForStandaloneInputs.expressions());
     }
 
     @Override

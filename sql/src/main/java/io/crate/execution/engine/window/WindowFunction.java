@@ -22,36 +22,11 @@
 
 package io.crate.execution.engine.window;
 
-import io.crate.data.Input;
 import io.crate.data.Row;
-import io.crate.execution.engine.aggregation.AggregationFunction;
-import io.crate.execution.engine.collect.CollectExpression;
 
-import java.util.List;
+public interface WindowFunction {
 
-public class WindowFunctionContext {
+    Iterable<Row> execute(WindowFrame frame);
 
-    private final List<Input<?>> inputs;
-    private final AggregationFunction function;
-    private final List<? extends CollectExpression<Row, ?>> expressions;
-
-    public WindowFunctionContext(List<Input<?>> inputs,
-                                 AggregationFunction function,
-                                 List<? extends CollectExpression<Row, ?>> expressions) {
-        this.inputs = inputs;
-        this.function = function;
-        this.expressions = expressions;
-    }
-
-    public List<Input<?>> inputs() {
-        return inputs;
-    }
-
-    public AggregationFunction function() {
-        return function;
-    }
-
-    public List<? extends CollectExpression<Row, ?>> expressions() {
-        return expressions;
-    }
+    int numColumns();
 }

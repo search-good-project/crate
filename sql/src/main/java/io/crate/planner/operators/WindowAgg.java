@@ -27,9 +27,11 @@ import io.crate.analyze.WindowDefinition;
 import io.crate.collections.Lists2;
 import io.crate.data.Row;
 import io.crate.exceptions.UnsupportedFeatureException;
+import io.crate.execution.dsl.projection.OrderedTopNProjection;
 import io.crate.execution.dsl.projection.WindowAggProjection;
 import io.crate.execution.dsl.projection.builder.InputColumns;
 import io.crate.execution.dsl.projection.builder.ProjectionBuilder;
+import io.crate.expression.symbol.InputColumn;
 import io.crate.expression.symbol.Symbol;
 import io.crate.expression.symbol.WindowFunction;
 import io.crate.planner.ExecutionPlan;
@@ -60,16 +62,20 @@ public class WindowAgg extends OneInputPlan {
         for (WindowFunction windowFunction : windowFunctions) {
             WindowDefinition windowDefinition = windowFunction.windowDefinition();
             if (windowDefinition.partitions().size() > 0 ||
-                windowDefinition.orderBy() != null ||
                 windowDefinition.windowFrameDefinition() != null) {
-                throw new UnsupportedFeatureException("Custom window definitions are currently not supported. " +
-                                                      "Only empty OVER() windows are supported. ");
+                throw new UnsupportedFeatureException("Window partitions and custom frame definitions are not supported");
             }
         }
 
         return (tableStats, usedBeforeNextFetch) -> {
             HashSet<Symbol> allUsedColumns = new HashSet<>(usedBeforeNextFetch);
             Set<Symbol> columnsUsedInFunctions = extractColumns(windowFunctions);
+            for (WindowFunction windowFunction : windowFunctions) {
+                OrderBy orderBy = windowFunction.windowDefinition().orderBy();
+                if (orderBy != null) {
+                    columnsUsedInFunctions.addAll(extractColumns(orderBy.orderBySymbols()));
+                }
+            }
             allUsedColumns.addAll(columnsUsedInFunctions);
             LogicalPlan sourcePlan = source.build(tableStats, allUsedColumns);
 
@@ -121,6 +127,24 @@ public class WindowAgg extends OneInputPlan {
         InputColumns.SourceSymbols sourceSymbols = new InputColumns.SourceSymbols(source.outputs());
         List<Symbol> standaloneWithInputs = InputColumns.create(this.standalone, sourceSymbols);
         for (Map.Entry<WindowDefinition, LinkedHashMap<WindowFunction, List<Symbol>>> entry : groupFunctionsByWindow(sourceSymbols, windowFunctions).entrySet()) {
+            OrderBy orderBy = entry.getKey().orderBy();
+            if (orderBy != null) {
+                InputColumns.SourceSymbols orderByCtx = new InputColumns.SourceSymbols(source.outputs());
+                OrderedTopNProjection topNProjection = new OrderedTopNProjection(
+                    Limit.limitAndOffset(limit, offset),
+                    0,
+                    InputColumns.create(source.outputs(), orderByCtx),
+                    InputColumn.fromSymbols(orderBy.orderBySymbols()),
+                    orderBy.reverseFlags(),
+                    orderBy.nullsFirst()
+                );
+                sourcePlan.addProjection(
+                    topNProjection,
+                    limit,
+                    offset,
+                    null
+                );
+            }
             sourcePlan.addProjection(new WindowAggProjection(entry.getKey(), entry.getValue(), standaloneWithInputs));
         }
         return sourcePlan;
@@ -135,11 +159,8 @@ public class WindowAgg extends OneInputPlan {
 
             WindowFunction windowFunctionSymbol = (WindowFunction) InputColumns.create(windowFunction, sourceSymbols);
             List<Symbol> inputs = InputColumns.create(windowFunction.arguments(), sourceSymbols);
-            LinkedHashMap<WindowFunction, List<Symbol>> functionsWithInputs = groupedFunctions.get(windowDefinition);
-            if (functionsWithInputs == null) {
-                functionsWithInputs = new LinkedHashMap<>();
-                groupedFunctions.put(windowDefinition, functionsWithInputs);
-            }
+            LinkedHashMap<WindowFunction, List<Symbol>> functionsWithInputs =
+                groupedFunctions.computeIfAbsent(windowDefinition, k -> new LinkedHashMap<>());
             functionsWithInputs.put(windowFunctionSymbol, inputs);
         }
         return groupedFunctions;
