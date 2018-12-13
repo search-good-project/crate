@@ -30,20 +30,31 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
+
+import static io.crate.sql.tree.FrameBound.Type.CURRENT_ROW;
+import static io.crate.sql.tree.FrameBound.Type.UNBOUNDED_PRECEDING;
+import static io.crate.sql.tree.WindowFrame.Type.RANGE;
 
 /**
  * Representation of a window used to describe the window function calls target.
  */
 public class WindowDefinition implements Writeable {
 
+    public  static final WindowFrameDefinition DEFAULT_WINDOW_FRAME = new WindowFrameDefinition(
+        RANGE,
+        new FrameBoundDefinition(UNBOUNDED_PRECEDING),
+        new FrameBoundDefinition(CURRENT_ROW)
+    );
+
     private final List<Symbol> partitions;
     @Nullable
     private final OrderBy orderBy;
-    @Nullable
+    @Nonnull
     private final WindowFrameDefinition windowFrameDefinition;
 
     public WindowDefinition(StreamInput in) throws IOException {
@@ -54,10 +65,15 @@ public class WindowDefinition implements Writeable {
 
     public WindowDefinition(List<Symbol> partitions,
                             @Nullable OrderBy orderBy,
-                            @Nullable WindowFrameDefinition windowFrameDefinition) {
+                            @Nonnull WindowFrameDefinition windowFrameDefinition) {
         this.partitions = partitions;
         this.orderBy = orderBy;
         this.windowFrameDefinition = windowFrameDefinition;
+    }
+
+    public WindowDefinition(List<Symbol> partitions,
+                            @Nullable OrderBy orderBy) {
+        this(partitions, orderBy, DEFAULT_WINDOW_FRAME);
     }
 
     public List<Symbol> partitions() {
@@ -69,7 +85,6 @@ public class WindowDefinition implements Writeable {
         return orderBy;
     }
 
-    @Nullable
     public WindowFrameDefinition windowFrameDefinition() {
         return windowFrameDefinition;
     }

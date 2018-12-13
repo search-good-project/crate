@@ -121,7 +121,7 @@ public class WindowBatchIteratorTest {
     }
 
     private static WindowDefinition emptyWindow() {
-        return new WindowDefinition(Collections.emptyList(), null, null);
+        return new WindowDefinition(Collections.emptyList(), null);
     }
 
 }

@@ -62,7 +62,7 @@ public class WindowAgg extends OneInputPlan {
         for (WindowFunction windowFunction : windowFunctions) {
             WindowDefinition windowDefinition = windowFunction.windowDefinition();
             if (windowDefinition.partitions().size() > 0 ||
-                windowDefinition.windowFrameDefinition() != null) {
+                !windowDefinition.windowFrameDefinition().equals(WindowDefinition.DEFAULT_WINDOW_FRAME)) {
                 throw new UnsupportedFeatureException("Window partitions and custom frame definitions are not supported");
             }
         }

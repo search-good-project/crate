@@ -56,9 +56,9 @@ public class WindowAggProjectionSerialisationTest {
         FunctionImplementation sumFunctionImpl = getSumFunction();
 
         WindowDefinition partitionByOneWindowDef =
-            new WindowDefinition(singletonList(Literal.of(1L)), null, null);
+            new WindowDefinition(singletonList(Literal.of(1L)), null);
         WindowDefinition partitionByTwoWindowDef =
-            new WindowDefinition(singletonList(Literal.of(2L)), null, null);
+            new WindowDefinition(singletonList(Literal.of(2L)), null);
 
         WindowFunction firstWindowFunction = new WindowFunction(sumFunctionImpl.info(), Arrays.asList(Literal.of(1L)), partitionByOneWindowDef);
         WindowFunction secondWindowFunction = new WindowFunction(sumFunctionImpl.info(), Arrays.asList(Literal.of(2L)), partitionByTwoWindowDef);

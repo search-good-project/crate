@@ -96,7 +96,7 @@ public class WindowBatchIterator extends MappedForwardingBatchIterator<Row, Row>
                         BatchIterator<Row> source,
                         List<WindowFunction> functions) {
         assert windowDefinition.partitions().size() == 0 : "Window partitions are not supported.";
-        assert windowDefinition.windowFrameDefinition() == null : "Window frame definitions are not supported";
+        assert windowDefinition.windowFrameDefinition().equals(WindowDefinition.DEFAULT_WINDOW_FRAME) : "Custom window frame definitions are not supported";
 
         this.windowDefinition = windowDefinition;
         this.source = source;
